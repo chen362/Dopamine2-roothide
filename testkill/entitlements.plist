@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 基础系统权限 -->
+    <key>platform-application</key>
+    <true/>
+    <key>com.apple.private.security.container-required</key>
+    <false/>
+    <key>com.apple.system-task-ports</key>
+    <true/>
+    <key>task_for_pid-allow</key>
+    <true/>
+    <key>get-task-allow</key>
+    <true/>
+    <key>proc_info-allow</key>
+    <true/>
+    <key>run-unsigned-code</key>
+    <true/>
+    <key>com.apple.private.security.no-container</key>
+    <true/>
+    <key>com.apple.private.skip-library-validation</key>
+    <true/>
+
+    <!-- 网络相关权限 -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <key>com.apple.security.network.client.local</key>
+    <true/>
+
+    <!-- 文件系统权限 -->
+    <key>com.apple.private.security.filesystem.sandbox</key>
+    <true/>
+    <key>com.apple.private.security.filesystem.container</key>
+    <true/>
+    <key>com.apple.private.security.filesystem.directory</key>
+    <true/>
+    <key>com.apple.private.security.filesystem.read-write</key>
+    <true/>
+    <key>com.apple.private.security.rootless.storage</key>
+    <true/>
+
+    <!-- 进程控制权限 -->
+    <key>com.apple.private.security.process-control</key>
+    <true/>
+    <key>com.apple.private.security.process-management</key>
+    <true/>
+
+    <!-- 系统服务权限 -->
+    <key>com.apple.private.security.system-application</key>
+    <true/>
+    <key>com.apple.private.security.system-service</key>
+    <true/>
+
+    <!-- 内存访问权限 -->
+    <key>com.apple.private.security.virtual-memory</key>
+    <true/>
+
+    <!-- 窗口管理相关权限 -->
+    <key>com.apple.private.window-management</key>
+    <true/>
+    <key>com.apple.private.ui-services</key>
+    <true/>
+    <key>com.apple.private.graphics.system-surface</key>
+    <true/>
+    <key>com.apple.private.frontboard.window-management</key>
+    <true/>
+    <key>com.apple.private.display.window-priority</key>
+    <true/>
+    <key>com.apple.springboard.window-management</key>
+    <true/>
+
+    <!-- 通知权限 -->
+    <key>com.apple.private.darwin-notification</key>
+    <true/>
+
+    <!-- 剪贴板权限 -->
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+    <array>
+        <string>com.apple.pasteboard.proxy</string>
+         <string>36206</string>  <!-- 添加这一行 -->
+    </array>
+
+    <!-- UIKit权限 -->
+    <key>com.apple.security.temporary-exception.shared-preference.read-write</key>
+    <array>
+        <string>com.apple.UIKit</string>
+    </array>
+
+    <!-- 新增权限 -->
+    <key>com.apple.security.exception.files.absolute-path.read-write</key>
+    <true/>
+    <key>com.apple.security.temporary-exception.sbpl</key>
+    <array>
+        <string>(allow network*)</string>
+        <string>(allow system-graphics)</string>
+        <string>(allow window-server-access)</string>
+        <string>(allow mach-lookup)</string>
+    </array>
+
+    <!-- 添加新的权限 -->
+    <key>com.apple.private.security.root-mode</key>
+    <true/>
+    <key>com.apple.private.security.root-access</key>
+    <true/>
+    <key>com.apple.private.security.system-files</key>
+    <true/>
+    <key>com.apple.private.security.disk-device-access</key>
+    <true/>
+    <key>com.apple.private.MobileGestalt.AllowedProtectedKeys</key>
+    <true/>
+    <key>com.apple.private.security.storage.AppDataContainers</key>
+    <true/>
+    <key>com.apple.private.security.no-sandbox</key>
+    <true/>
+    <key>com.apple.private.security.storage.AppBundles</key>
+    <true/>
+    <key>com.apple.private.security.storage.MobileDocuments</key>
+    <true/>
+</dict>
+</plist>

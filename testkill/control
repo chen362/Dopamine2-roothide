@@ -1,0 +1,9 @@
+Package: c0m.hg4sd.f1oat1ngba11
+Name: 靐龗麤龖瓩韊
+Version: 5.2.3
+Architecture: iphoneos-arm64e
+Description: 齾龗纞鬡饢騳
+Maintainer: 龖鬺饢麤靐龗
+Author: 齉龘爨钃舙龖
+Section: Tweaks
+Depends: ellekit (>= 0.1), firmware (>= 14.5), com.roothide.patchloader
