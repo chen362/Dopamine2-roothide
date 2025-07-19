@@ -1,5 +1,6 @@
 #include "kernel_rw.h"
 #include <dlfcn.h>
+#include <string.h>
 
 // 动态加载的函数指针
 static int (*_jbclient_initialize_primitives)(void) = NULL;
@@ -46,13 +47,25 @@ uint64_t kread64(uint64_t addr) {
 // 纯内核态初始化函数
 int pure_kernel_init(void) {
 #ifdef TARGET_OS_IPHONE
-    // 动态加载libjailbreak
-    libjailbreak_handle = dlopen("/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-    if (!libjailbreak_handle) {
-        libjailbreak_handle = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
+    // 使用roothide的jbroot获取正确的无根路径
+    const char *jb_lib_paths[] = {
+        jbroot("/usr/lib/libjailbreak.dylib"),
+        "/usr/lib/libjailbreak.dylib",  // 备用路径
+        "/var/jb/usr/lib/libjailbreak.dylib",  // 备用路径
+        NULL
+    };
+    
+    // 尝试多个路径加载libjailbreak
+    for (int i = 0; jb_lib_paths[i] != NULL; i++) {
+        libjailbreak_handle = dlopen(jb_lib_paths[i], RTLD_LAZY);
+        if (libjailbreak_handle) {
+            // 加载成功，跳出循环
+            break;
+        }
     }
+    
     if (!libjailbreak_handle) {
-        return -1;
+        return -1;  // 加载失败
     }
     
     // 获取所有函数指针
@@ -66,20 +79,19 @@ int pure_kernel_init(void) {
     
     if (!_jbclient_initialize_primitives || !_kreadbuf) {
         dlclose(libjailbreak_handle);
-        return -1;
+        return -1;  // 符号加载失败
     }
     
-    // 调用初始化函数
+    // 调用roothide初始化函数
     int ret = _jbclient_initialize_primitives();
     if (ret != 0) {
         dlclose(libjailbreak_handle);
-        return -1;
+        return -1;  // 初始化失败
     }
     
-    return 0;
+    return 0;  // 成功
 #else
     // 语法检查模式
-    printf("[testkill] 语法检查模式，跳过内核原语初始化\n");
     return 0;
 #endif
 }

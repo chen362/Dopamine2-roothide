@@ -25,9 +25,13 @@ TestFloatingBall_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS)
 
 TOOL_NAME = FloatingBallHelper
 FloatingBallHelper_FILES = bf32026.m ModuleHelper.m kernel_rw.c
-# 简化编译标志
-FloatingBallHelper_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS) -DTARGET_OS_IPHONE=1
-# 简化链接：只链接系统库，运行时动态查找libjailbreak
+# 添加roothide头文件路径
+FloatingBallHelper_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS) \
+                           -DTARGET_OS_IPHONE=1 \
+                           -I$(THEOS)/include \
+                           -I../BaseBin/libjailbreak/src \
+                           -I/usr/include/roothide
+# 链接系统库
 FloatingBallHelper_LDFLAGS = -framework Foundation -framework UIKit
 FloatingBallHelper_CODESIGN_FLAGS = -Sentitlements.plist
 FloatingBallHelper_INSTALL_PATH = /Library/Helper

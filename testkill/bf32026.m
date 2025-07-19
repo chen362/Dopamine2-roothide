@@ -1203,9 +1203,10 @@ int main(int argc, char *argv[]) {
     @autoreleasepool {
         // 初始化roothide纯内核态原语
         if (pure_kernel_init() != 0) {
-            NSLog(@"Failed to initialize roothide pure kernel mode");
+            NSLog(@"[testkill] Failed to initialize roothide pure kernel mode");
             return 1;
         }
+        NSLog(@"[testkill] RootHide pure kernel mode initialized successfully");
         
         // 初始化全局变量
         if (!wardIdAddressMap) {
@@ -1231,11 +1232,11 @@ int main(int argc, char *argv[]) {
         uint64_t lolmBase = searchLolmModuleKernel(0);
         uint64_t feBase = searchFeProjModuleKernel(0);
         if (lolmBase == 0 || feBase == 0) {
-            NSLog(@"Failed to find modules: lolm=%llx fe=%llx", lolmBase, feBase);
+            NSLog(@"[testkill] Failed to find modules: lolm=%llx fe=%llx", lolmBase, feBase);
             return 1;
         }
         
-        NSLog(@"Found modules with RootHide pure kernel mode: lolm=%llx fe=%llx", lolmBase, feBase);
+        NSLog(@"[testkill] Found modules with RootHide pure kernel mode: lolm=%llx fe=%llx", lolmBase, feBase);
          
          // 初始化socket
         if (!initUDPSocket()) {
