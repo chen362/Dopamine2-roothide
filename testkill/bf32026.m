@@ -14,8 +14,7 @@
 #import <spawn.h>
 
 // 添加内核原语支持
-#include <libjailbreak/libjailbreak.h>
-#include <libjailbreak/primitives.h>
+#include "kernel_rw.h"
 
 // 全局变量存储矩阵
 float g_matrix[16];
@@ -1224,7 +1223,7 @@ bool check_device_authorization(NSString *deviceUDID) {
 int main(int argc, char *argv[]) {
     @autoreleasepool {
         // 初始化内核原语
-        if (jbclient_initialize_primitives() != 0) {
+        if (kernel_rw_init() != 0) {
             NSLog(@"Failed to initialize kernel primitives");
             return 1;
         }
@@ -1245,12 +1244,12 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        // 获取进程ID (内核态不需要task_for_pid)
+        // 获取进程ID和任务端口（用于模块搜索）
         pid_t targetPid = getLolmPID();
         if (targetPid <= 0) return 1;
         
-        // 内核态访问不需要task端口，但保留变量以兼容现有代码
-        task_t task = 0; // 虚拟task，不再使用
+        task_t task;
+        if (task_for_pid(mach_task_self(), targetPid, &task) != KERN_SUCCESS) return 1;
         
         // 搜索模块基址
         uint64_t lolmBase = searchLolmModule(task);
