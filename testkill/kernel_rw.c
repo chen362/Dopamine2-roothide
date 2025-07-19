@@ -1,21 +1,30 @@
 #include "kernel_rw.h"
-#include <string.h>
 
-// 使用roothide的内核原语初始化
+#ifdef TARGET_OS_IPHONE
+#import <Foundation/Foundation.h>
+#else
+// 语法检查模式下的简单声明
+#include <stdio.h>
+void NSLog(const char* format, ...);
+#endif
+
+// 纯内核态初始化函数
 int pure_kernel_init(void) {
-#ifdef __APPLE__
-    // 在iOS设备上直接使用roothide的初始化函数
+#ifdef TARGET_OS_IPHONE
+    NSLog(@"[testkill] 初始化roothide内核原语...");
+    
+    // 使用roothide的jbclient初始化内核原语
     int ret = jbclient_initialize_primitives();
     if (ret != 0) {
-        printf("Failed to initialize roothide kernel primitives: %d\n", ret);
+        NSLog(@"[testkill] 内核原语初始化失败: %d", ret);
         return -1;
     }
     
-    printf("RootHide pure kernel mode initialized successfully\n");
+    NSLog(@"[testkill] 内核原语初始化成功");
     return 0;
 #else
-    // Linux环境下的模拟实现
-    printf("Linux simulation mode: RootHide primitives simulated\n");
+    // 语法检查模式
+    printf("[testkill] 语法检查模式，跳过内核原语初始化\n");
     return 0;
 #endif
 }

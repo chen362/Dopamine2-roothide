@@ -30,25 +30,25 @@ pid_t getLolmPID(void) {
 
 // 使用roothide内核原语精确搜索模块
 uint64_t searchModuleByName(pid_t pid, const char* moduleName) {
-#ifdef __APPLE__
+#ifdef TARGET_OS_IPHONE
     // 在iOS设备上使用roothide的proc_find
     uint64_t proc = proc_find(pid);
     if (!proc) {
-        printf("Failed to find process %d in kernel\n", pid);
+        NSLog(@"[testkill] 无法在内核中找到进程 %d", pid);
         return 0;
     }
     
     // 获取进程的task结构
     uint64_t task = proc_task(proc);
     if (!task) {
-        printf("Failed to get task for process %d\n", pid);
+        NSLog(@"[testkill] 无法获取进程 %d 的task", pid);
         return 0;
     }
     
     // 获取进程的vm_map
     uint64_t vm_map = kread_ptr(task + koffsetof(task, map));
     if (!vm_map) {
-        printf("Failed to get vm_map for process %d\n", pid);
+        NSLog(@"[testkill] 无法获取进程 %d 的vm_map", pid);
         return 0;
     }
     
@@ -70,7 +70,7 @@ uint64_t searchModuleByName(pid_t pid, const char* moduleName) {
                     char buffer[4096];
                     if (kreadbuf(start, buffer, sizeof(buffer)) == 0) {
                         if (strstr(buffer, moduleName)) {
-                            printf("Found %s at address: 0x%llx\n", moduleName, start);
+                            NSLog(@"[testkill] 找到模块 %s 地址: 0x%llx", moduleName, start);
                             return start;
                         }
                     }
@@ -82,25 +82,38 @@ uint64_t searchModuleByName(pid_t pid, const char* moduleName) {
         entry = kread_ptr(entry + koffsetof(vm_map_entry, links) + koffsetof(vm_map_links, next));
     }
     
-    printf("Module %s not found in process %d\n", moduleName, pid);
+    NSLog(@"[testkill] 在进程 %d 中未找到模块 %s", pid, moduleName);
     return 0;
 #else
-    // Linux环境下的模拟搜索
-    uint64_t testBases[] = {
-        0x100000000ULL, 0x102000000ULL, 0x104000000ULL, 0x106000000ULL,
-        0x108000000ULL, 0x10a000000ULL, 0x110000000ULL, 0x120000000ULL,
-        0x130000000ULL, 0x140000000ULL, 0x150000000ULL, 0x160000000ULL
-    };
-    
-    for (int i = 0; i < sizeof(testBases)/sizeof(testBases[0]); i++) {
-        char buffer[4096] = {0};
-        if (kreadbuf(testBases[i], buffer, sizeof(buffer)) == 0) {
-            if (strstr(buffer, moduleName)) {
-                return testBases[i];
-            }
-        }
+    // 语法检查模式
+    NSLog(@"[testkill] 语法检查模式，模拟搜索模块 %s", moduleName);
+    return 0x100000000ULL; // 返回模拟地址
+#endif
+}
+
+// 使用dyld信息搜索模块（更精确的方法）
+uint64_t searchModuleUsingDyldInfo(pid_t pid, const char* moduleName) {
+#ifdef TARGET_OS_IPHONE
+    uint64_t proc = proc_find(pid);
+    if (!proc) {
+        NSLog(@"[testkill] 无法找到进程 %d", pid);
+        return 0;
     }
-    return 0;
+    
+    uint64_t task = proc_task(proc);
+    if (!task) {
+        NSLog(@"[testkill] 无法获取task");
+        return 0;
+    }
+    
+    // TODO: 实现dyld信息解析来获取模块地址
+    // 这需要解析dyld的all_image_infos结构
+    NSLog(@"[testkill] dyld信息搜索暂未实现，回退到vm_map搜索");
+    return searchModuleByName(pid, moduleName);
+#else
+    // 语法检查模式
+    NSLog(@"[testkill] 语法检查模式，模拟dyld搜索模块 %s", moduleName);
+    return 0x100000000ULL;
 #endif
 }
 
@@ -133,7 +146,7 @@ uint64_t searchLolmModule(task_t task) {
             vm_size_t bytesRead;
             if (vm_read_overwrite(task, address, sizeof(buffer), (vm_address_t)buffer, &bytesRead) == KERN_SUCCESS) {
                 struct mach_header_64 *header = (struct mach_header_64 *)buffer;
-                if (header.magic == MH_MAGIC_64) {
+                if (header->magic == MH_MAGIC_64) {
                     char *cmds = malloc(header->sizeofcmds);
                     if (cmds) {
                         if (vm_read_overwrite(task, address + sizeof(struct mach_header_64), 

@@ -1,13 +1,24 @@
 #ifndef MODULEHELPER_H
 #define MODULEHELPER_H
 
+#ifdef TARGET_OS_IPHONE
 #import <Foundation/Foundation.h>
-#include <stdint.h>
-#include <sys/sysctl.h>
-#include <sys/types.h>
 #include <mach/mach.h>
 #include <mach-o/loader.h>
 #include <mach-o/dyld.h>
+#else
+// 语法检查模式下的简化声明
+#include <stdio.h>
+#include <stdint.h>
+typedef uint32_t task_t;
+#define MH_MAGIC_64 0xfeedfacf
+#define VM_PROT_READ 0x01
+#define VM_PROT_EXECUTE 0x04
+#endif
+
+#include <stdint.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
 
 // 英雄信息结构体
 typedef struct {
@@ -37,22 +48,8 @@ uint64_t searchModuleUsingDyldInfo(pid_t pid, const char* moduleName);
 uint64_t searchLolmModule(task_t task);
 uint64_t searchFeProjModule(task_t task);
 
-// 读取4x4矩阵
-void readMatrix4x4(task_t task, uint64_t lolmBase, uint64_t feBase, float *matrix);
-
-// 遍历英雄结构
-void readHeroList(task_t task, uint64_t lolmBase, HeroInfo *heroes, int *count, float *matrix);
-
-// 坐标转换相关函数
-
-CGPoint worldToScreen(float x, float y, float *matrix);
-CGPoint toMiniMapPosition(float x, float y);
-
-// 写入调试日志
-void writeDebugLog(NSString *message);
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MODULEHELPER_H */ 
+#endif 

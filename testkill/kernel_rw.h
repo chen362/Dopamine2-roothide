@@ -5,9 +5,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
 
-// 引入roothide的核心头文件（简化版本）
-#ifdef __APPLE__
+// 在iOS设备上编译时包含roothide头文件
+#ifdef TARGET_OS_IPHONE
 #include <roothide.h>
 #include <libjailbreak/libjailbreak.h>
 
@@ -35,7 +36,7 @@ uint32_t kread32(uint64_t addr);
 uint64_t kread64(uint64_t addr);
 
 #else
-// Linux环境下的声明（用于编译测试）
+// 语法检查模式下的声明
 int jbclient_initialize_primitives(void);
 int kreadbuf(uint64_t kaddr, void* buffer, size_t size);
 uint64_t proc_find(pid_t pid);
@@ -51,8 +52,5 @@ uint64_t kread64(uint64_t addr);
 
 // 纯内核态初始化
 int pure_kernel_init(void);
-
-// 使用roothide的内核原语（直接暴露）
-// 这些函数将直接调用libjailbreak的实现
 
 #endif
