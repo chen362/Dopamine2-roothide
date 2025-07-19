@@ -28,54 +28,95 @@ pid_t getLolmPID(void) {
     return targetPid;
 }
 
-// 纯内核态搜索lolm模块（使用roothide内核原语）
-uint64_t searchLolmModuleKernel(uint64_t proc) {
-    // 在纯内核态下，我们可以直接遍历进程的内存映射
-    // 这里暂时使用简化的搜索方法
+// 使用roothide内核原语精确搜索模块
+uint64_t searchModuleByName(pid_t pid, const char* moduleName) {
+#ifdef __APPLE__
+    // 在iOS设备上使用roothide的proc_find
+    uint64_t proc = proc_find(pid);
+    if (!proc) {
+        printf("Failed to find process %d in kernel\n", pid);
+        return 0;
+    }
+    
+    // 获取进程的task结构
+    uint64_t task = proc_task(proc);
+    if (!task) {
+        printf("Failed to get task for process %d\n", pid);
+        return 0;
+    }
+    
+    // 获取进程的vm_map
+    uint64_t vm_map = kread_ptr(task + koffsetof(task, map));
+    if (!vm_map) {
+        printf("Failed to get vm_map for process %d\n", pid);
+        return 0;
+    }
+    
+    // 遍历内存映射区域查找模块
+    uint64_t entry = kread_ptr(vm_map + koffsetof(vm_map, hdr) + koffsetof(vm_map_header, links) + koffsetof(vm_map_links, next));
+    
+    while (entry && entry != (vm_map + koffsetof(vm_map, hdr))) {
+        uint64_t start = kread64(entry + koffsetof(vm_map_entry, links) + koffsetof(vm_map_links, start));
+        uint64_t end = kread64(entry + koffsetof(vm_map_entry, links) + koffsetof(vm_map_links, end));
+        
+        // 检查这个区域是否是可执行的
+        uint32_t protection = kread32(entry + koffsetof(vm_map_entry, protection));
+        if (protection & VM_PROT_EXECUTE) {
+            // 读取Mach-O头部
+            struct mach_header_64 header;
+            if (kreadbuf(start, &header, sizeof(header)) == 0) {
+                if (header.magic == MH_MAGIC_64) {
+                    // 检查是否包含目标模块名
+                    char buffer[4096];
+                    if (kreadbuf(start, buffer, sizeof(buffer)) == 0) {
+                        if (strstr(buffer, moduleName)) {
+                            printf("Found %s at address: 0x%llx\n", moduleName, start);
+                            return start;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 移动到下一个entry
+        entry = kread_ptr(entry + koffsetof(vm_map_entry, links) + koffsetof(vm_map_links, next));
+    }
+    
+    printf("Module %s not found in process %d\n", moduleName, pid);
+    return 0;
+#else
+    // Linux环境下的模拟搜索
     uint64_t testBases[] = {
-        0x100000000ULL,
-        0x102000000ULL,
-        0x104000000ULL,
-        0x106000000ULL,
-        0x108000000ULL,
-        0x10a000000ULL
+        0x100000000ULL, 0x102000000ULL, 0x104000000ULL, 0x106000000ULL,
+        0x108000000ULL, 0x10a000000ULL, 0x110000000ULL, 0x120000000ULL,
+        0x130000000ULL, 0x140000000ULL, 0x150000000ULL, 0x160000000ULL
     };
     
     for (int i = 0; i < sizeof(testBases)/sizeof(testBases[0]); i++) {
         char buffer[4096] = {0};
         if (kreadbuf(testBases[i], buffer, sizeof(buffer)) == 0) {
-            if (strstr(buffer, "lolm")) {
+            if (strstr(buffer, moduleName)) {
                 return testBases[i];
             }
         }
     }
     return 0;
+#endif
+}
+
+// 纯内核态搜索lolm模块
+uint64_t searchLolmModuleKernel(uint64_t proc) {
+    pid_t pid = getLolmPID();
+    return searchModuleByName(pid, "lolm");
 }
 
 // 纯内核态搜索FEProj模块
 uint64_t searchFeProjModuleKernel(uint64_t proc) {
-    uint64_t testBases[] = {
-        0x110000000ULL,
-        0x120000000ULL,
-        0x130000000ULL,
-        0x140000000ULL,
-        0x150000000ULL,
-        0x160000000ULL,
-        0x170000000ULL,
-        0x180000000ULL
-    };
-    
-    for (int i = 0; i < sizeof(testBases)/sizeof(testBases[0]); i++) {
-        char buffer[4096] = {0};
-        if (kreadbuf(testBases[i], buffer, sizeof(buffer)) == 0) {
-            if (strstr(buffer, "FEProj")) {
-                return testBases[i];
-            }
-        }
-    }
-    return 0;
+    pid_t pid = getLolmPID();
+    return searchModuleByName(pid, "FEProj");
 }
 
+// 保留原有的用户态搜索函数作为备用
 uint64_t searchLolmModule(task_t task) {
     vm_address_t address = 0;
     vm_size_t size;
@@ -92,7 +133,7 @@ uint64_t searchLolmModule(task_t task) {
             vm_size_t bytesRead;
             if (vm_read_overwrite(task, address, sizeof(buffer), (vm_address_t)buffer, &bytesRead) == KERN_SUCCESS) {
                 struct mach_header_64 *header = (struct mach_header_64 *)buffer;
-                if (header->magic == MH_MAGIC_64) {
+                if (header.magic == MH_MAGIC_64) {
                     char *cmds = malloc(header->sizeofcmds);
                     if (cmds) {
                         if (vm_read_overwrite(task, address + sizeof(struct mach_header_64), 

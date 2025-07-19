@@ -11,24 +11,29 @@
 
 // 英雄信息结构体
 typedef struct {
-    int camp;       // 阵营: 2=蓝方, 1=红方
-    int heroId;     // 英雄ID
-    float hpPercentage;  // 添加这行
-    float posX;     // X坐标(解密后)
-    float posY;     // Y坐标(解密后)
-    float posZ;     // Z坐标(解密后)
+    uint32_t camp;
+    uint32_t heroId;
+    float posX;
+    float posY;
+    float posZ;
 } HeroInfo;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// 纯内核态的模块搜索接口
+// 获取进程PID
 pid_t getLolmPID(void);
+
+// 精确的内核态模块搜索接口
+uint64_t searchModuleByName(pid_t pid, const char* moduleName);
 uint64_t searchLolmModuleKernel(uint64_t proc);
 uint64_t searchFeProjModuleKernel(uint64_t proc);
 
-// 兼容性函数（仍保留原接口）
+// 更精确的方法：使用dyld信息搜索
+uint64_t searchModuleUsingDyldInfo(pid_t pid, const char* moduleName);
+
+// 兼容性函数（保留原接口）
 uint64_t searchLolmModule(task_t task);
 uint64_t searchFeProjModule(task_t task);
 
