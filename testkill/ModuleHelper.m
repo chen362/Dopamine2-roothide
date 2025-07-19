@@ -1,6 +1,13 @@
 #import "ModuleHelper.h"
 #include "kernel_rw.h"
 
+#ifdef TARGET_OS_IPHONE
+// iOS特有的包含
+#include <mach/vm_region.h>
+#include <mach/vm_map.h>
+#include <mach/mach_vm.h>
+#endif
+
 // 获取进程PID
 pid_t getLolmPID(void) {
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
