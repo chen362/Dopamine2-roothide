@@ -1,0 +1,57 @@
+TARGET = iphone:clang:latest:14.0
+ARCHS = arm64e
+
+THEOS_DEVICE_IP = 192.168.1.5
+THEOS_PACKAGE_SCHEME = roothide
+include $(THEOS)/makefiles/common.mk
+
+# LLVM混淆设置
+export DEVELOPER_DIR = /Applications/Xcode.app/Contents/Developer
+export PATH := $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/bin:$(PATH)
+export THEOS_PLATFORM_SDK_ROOT = /usr/local/hkollvm
+export TARGET_CC = $(THEOS_PLATFORM_SDK_ROOT)/bin/clang
+export TARGET_CXX = $(THEOS_PLATFORM_SDK_ROOT)/bin/clang++
+export TARGET_LD = $(THEOS_PLATFORM_SDK_ROOT)/bin/clang++
+export XCRUN = /usr/bin/xcrun
+export LIPO = /usr/bin/lipo
+
+# 定义混淆参数
+OBFUSCATE_FLAGS = -O0 -mllvm -enable-bcfobf -mllvm -enable-cffobf -mllvm -enable-splitobf -mllvm -split_num=3 -mllvm -enable-subobf -mllvm -enable-indibran -mllvm -enable-funcwra -mllvm -enable-strcry -mllvm -bcf_junkasm -mllvm -bcf_junkasm_minnum=4 -mllvm -bcf_junkasm_maxnum=7 -mllvm -bcf_onlyjunkasm -mllvm -ah_antirebind -mllvm -indibran-use-stack -mllvm -acd-rename-methodimp -mllvm -enable-adb -mllvm -sub_loop=2 -mllvm -bcf_cond_compl=3 -mllvm -bcf_prob=40 -mllvm -strcry_prob=100 -mllvm -fw_prob=100 -mllvm -fw_times=2 -mllvm -bcf_loop=2
+
+# =============================================================================
+# testkill纯内核态工具配置
+# =============================================================================
+TOOL_NAME = testkill
+
+# 🎯 编译的源文件（你的代码）
+testkill_FILES = bf32026.m ModuleHelper.m kernel_rw.c
+
+# 🔧 编译标志
+testkill_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS) \
+                  -I../BaseBin/libjailbreak/src \
+                  -DTARGET_OS_IPHONE=1 \
+                  -Wall -Wextra
+
+# 🔗 链接配置
+testkill_LDFLAGS = -framework Foundation \
+                   -framework UIKit \
+                   -ljailbreak
+
+# 📱 安装配置
+testkill_CODESIGN_FLAGS = -Sentitlements.plist
+testkill_INSTALL_PATH = /usr/local/bin
+
+include $(THEOS_MAKE_PATH)/tool.mk
+
+# 安装后的权限设置
+after-install::
+	install.exec "chown root:wheel /usr/local/bin/testkill"
+	install.exec "chmod 755 /usr/local/bin/testkill"
+
+# =============================================================================
+# 说明：
+# 1. 你编译的是 bf32026.m + ModuleHelper.m + kernel_rw.c
+# 2. 链接时使用 -ljailbreak 而不是具体路径
+# 3. 运行时依赖设备上的 /usr/lib/libjailbreak.dylib
+# 4. roothide设备上必须已安装libjailbreak库
+# =============================================================================
