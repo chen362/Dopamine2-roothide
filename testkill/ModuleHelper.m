@@ -1,4 +1,5 @@
 #import "ModuleHelper.h"
+#include "kernel_rw.h"
 
 // 获取进程PID
 pid_t getLolmPID(void) {
@@ -25,6 +26,16 @@ pid_t getLolmPID(void) {
     free(proc);
     
     return targetPid;
+}
+
+// 纯内核态搜索lolm模块
+uint64_t searchLolmModuleKernel(uint64_t proc) {
+    return proc_find_module_base(proc, "lolm");
+}
+
+// 纯内核态搜索FEProj模块
+uint64_t searchFeProjModuleKernel(uint64_t proc) {
+    return proc_find_module_base(proc, "FEProj");
 }
 
 uint64_t searchLolmModule(task_t task) {

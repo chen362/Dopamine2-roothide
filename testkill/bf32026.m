@@ -125,45 +125,28 @@ static void initializeGlobalPaths() {
     g_killallPath = jbroot(@"/var/jb/usr/bin/killall");
     g_localImagePath = jbroot(@"/var/jb/tmp/heroicon/1.png");
 }
-// 内核态读取内存函数
+// 全局变量存储目标进程的内核proc结构
+static uint64_t g_targetProc = 0;
+
+// 纯内核态读取内存函数
 bool readMemory(task_t task, uint64_t address, void *buffer, size_t size) {
-    // 使用内核原语直接读取内存，绕过task_for_pid限制
-    return kreadbuf(address, buffer, size) == 0;
+    // 使用纯内核态原语直接读取内存
+    return proc_proc_kreadbuf(g_targetProc, g_targetProc, address, buffer, size) == 0;
 }
 
-// 备用：用户态读取内存函数（仅作为fallback）
-bool readMemoryUserMode(task_t task, uint64_t address, void *buffer, size_t size) {
-    vm_size_t readSize = size;
-    return vm_read_overwrite(task, address, size, (vm_address_t)buffer, &readSize) == KERN_SUCCESS;
+// 设置目标进程的proc结构
+void setTargetProc(uint64_t proc) {
+    g_targetProc = proc;
 }
 
-// 内核态指针链读取函数
+// 纯内核态指针链读取函数
 uint64_t followPointerChain(task_t task, uint64_t baseAddr, NSArray *offsets) {
-    uint64_t currentAddr = baseAddr;
-    
+    uint64_t offsets_array[offsets.count];
     for (int i = 0; i < offsets.count; i++) {
-        uint64_t targetAddr = currentAddr + [offsets[i] unsignedLongLongValue];
-        uint64_t nextAddr = 0;
-        // 直接使用内核读取，不依赖task参数
-        if (kreadbuf(targetAddr, &nextAddr, sizeof(nextAddr)) != 0) return 0;
-        currentAddr = nextAddr;
+        offsets_array[i] = [offsets[i] unsignedLongLongValue];
     }
     
-    return currentAddr;
-}
-
-// 备用：用户态指针链读取函数
-uint64_t followPointerChainUserMode(task_t task, uint64_t baseAddr, NSArray *offsets) {
-    uint64_t currentAddr = baseAddr;
-    
-    for (int i = 0; i < offsets.count; i++) {
-        uint64_t targetAddr = currentAddr + [offsets[i] unsignedLongLongValue];
-        uint64_t nextAddr = 0;
-        if (!readMemoryUserMode(task, targetAddr, &nextAddr, sizeof(nextAddr))) return 0;
-        currentAddr = nextAddr;
-    }
-    
-    return currentAddr;
+    return proc_read_ptr_chain(g_targetProc, baseAddr, offsets_array, (int)offsets.count);
 }
 // 修改后的 initTransform 函数
 void initTransform(CGSize resolution) {
@@ -265,7 +248,7 @@ void readMatrix4x4(task_t task, uint64_t lolmBase, uint64_t feBase, float *matri
     if (matrixAddr == 0) return;
     
     matrixAddr += 0xd8;
-    kreadbuf(matrixAddr, matrix, sizeof(float) * 16);
+    proc_proc_kreadbuf(g_targetProc, g_targetProc, matrixAddr, matrix, sizeof(float) * 16);
 }
 
 // 遍历英雄结构
@@ -287,25 +270,25 @@ void readHeroList(task_t task, uint64_t lolmBase, HeroInfo *heroes, int *count, 
     for (int i = 0; i < 10; i++) {
         uint64_t heroBase = heroListBase + 0x28 + (i * 0x18);
         uint64_t heroPtr = 0;
-        if (kreadbuf(heroBase, &heroPtr, sizeof(heroPtr)) != 0) continue;
+        if (proc_proc_kreadbuf(g_targetProc, g_targetProc, heroBase, &heroPtr, sizeof(heroPtr)) != 0) continue;
         
         uint32_t heroId = 0;
-        if (kreadbuf(heroPtr + 0x10, &heroId, sizeof(heroId)) != 0) continue;
+        if (proc_proc_kreadbuf(g_targetProc, g_targetProc, heroPtr + 0x10, &heroId, sizeof(heroId)) != 0) continue;
         if (heroId == 0) continue;
         
         uint32_t camp = 0;
-        if (kreadbuf(heroPtr + 0x58, &camp, sizeof(camp)) != 0) continue;
+        if (proc_proc_kreadbuf(g_targetProc, g_targetProc, heroPtr + 0x58, &camp, sizeof(camp)) != 0) continue;
         
         // 只处理敌方英雄
         if (camp != targetCamp) continue;
         
         uint64_t posBase = 0;
-        if (kreadbuf(heroPtr + 0xc8, &posBase, sizeof(posBase)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, heroPtr + 0xc8, &posBase, sizeof(posBase)) != 0) continue;
         
         int32_t encX = 0, encY = 0, encZ = 0;
-        if (kreadbuf(posBase + 0x40, &encX, sizeof(encX)) != 0) continue;
-        if (kreadbuf(posBase + 0x50, &encY, sizeof(encY)) != 0) continue;
-        if (kreadbuf(posBase + 0x48, &encZ, sizeof(encZ)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, posBase + 0x40, &encX, sizeof(encX)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, posBase + 0x50, &encY, sizeof(encY)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, posBase + 0x48, &encZ, sizeof(encZ)) != 0) continue;
         
         heroes[*count].camp = camp;
         heroes[*count].heroId = heroId;
@@ -320,19 +303,19 @@ void readHeroesHP(task_t task, uint64_t lolmBase, float *hpPercentages) {
     // 第一级指针链: lolmBase -> healthListBase
     uint64_t addr1 = lolmBase + 0xBC14CB0; //0xBC14CB0
     uint64_t value1 = 0;
-    if (kreadbuf(addr1, &value1, sizeof(value1)) != 0) return;
+    if (proc_kreadbuf(g_targetProc, addr1, &value1, sizeof(value1)) != 0) return;
     
     // 第二级 (+0xB0)
     uint64_t value2 = 0;
-    if (kreadbuf(value1 + 0xB0, &value2, sizeof(value2)) != 0) return;
+    if (proc_kreadbuf(g_targetProc, value1 + 0xB0, &value2, sizeof(value2)) != 0) return;
     
     // 第三级 (+0x0)
     uint64_t value3 = 0;
-    if (kreadbuf(value2 + 0x0, &value3, sizeof(value3)) != 0) return;
+    if (proc_kreadbuf(g_targetProc, value2 + 0x0, &value3, sizeof(value3)) != 0) return;
     
     // 第四级 (+0x18)
     uint64_t healthListBase = 0;
-    if (kreadbuf(value3 + 0x18, &healthListBase, sizeof(healthListBase)) != 0) return;
+    if (proc_kreadbuf(g_targetProc, value3 + 0x18, &healthListBase, sizeof(healthListBase)) != 0) return;
     
     // 根据矩阵[0]判断遍历范围
     int startIndex = (g_matrix[0] > 0) ? 5 : 0;
@@ -343,25 +326,25 @@ void readHeroesHP(task_t task, uint64_t lolmBase, float *hpPercentages) {
         
         uint64_t heroOffset = 0x28 + ((i + startIndex) * 0x18);
         uint64_t heroPtr = 0;
-        if (kreadbuf(healthListBase + heroOffset, &heroPtr, sizeof(heroPtr)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, healthListBase + heroOffset, &heroPtr, sizeof(heroPtr)) != 0) continue;
         
         uint64_t healthPtr = 0;
-        if (kreadbuf(heroPtr + 0x28, &healthPtr, sizeof(healthPtr)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, heroPtr + 0x28, &healthPtr, sizeof(healthPtr)) != 0) continue;
         
         // 读取当前血量
         uint64_t currentHealthPtr = 0;
-        if (kreadbuf(healthPtr + 0x8, &currentHealthPtr, sizeof(currentHealthPtr)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, healthPtr + 0x8, &currentHealthPtr, sizeof(currentHealthPtr)) != 0) continue;
         
         int32_t encCurrentHealth = 0;
-        if (kreadbuf(currentHealthPtr + 0x70, &encCurrentHealth, sizeof(encCurrentHealth)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, currentHealthPtr + 0x70, &encCurrentHealth, sizeof(encCurrentHealth)) != 0) continue;
         int32_t currentHealth = encCurrentHealth / 16384;
         
         // 读取最大血量
         uint64_t maxHealthPtr = 0;
-        if (kreadbuf(healthPtr + 0x10, &maxHealthPtr, sizeof(maxHealthPtr)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, healthPtr + 0x10, &maxHealthPtr, sizeof(maxHealthPtr)) != 0) continue;
         
         int32_t encMaxHealth = 0;
-        if (kreadbuf(maxHealthPtr + 0x70, &encMaxHealth, sizeof(encMaxHealth)) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, maxHealthPtr + 0x70, &encMaxHealth, sizeof(encMaxHealth)) != 0) continue;
         int32_t maxHealth = encMaxHealth / 16384;
         
         // 直接计算血量百分比,不做过滤
@@ -413,7 +396,7 @@ void readMonsterData(task_t task, uint64_t lolmBase, MonsterInfo *monsters) {
         
         // 遍历完整的指针链
         for (int j = 0; j < 10; j++) {
-            if (kreadbuf(currentAddr, &currentAddr, sizeof(currentAddr)) != 0) {
+            if (proc_kreadbuf(g_targetProc, currentAddr, &currentAddr, sizeof(currentAddr)) != 0) {
                 continue;
             }
             currentAddr += monsterOffsets[i][j];
@@ -421,7 +404,7 @@ void readMonsterData(task_t task, uint64_t lolmBase, MonsterInfo *monsters) {
         
         // 读取重生时间
         int32_t respawnTimeRaw = 0;
-        if (kreadbuf(currentAddr, &respawnTimeRaw, sizeof(respawnTimeRaw)) == 0) {
+        if (proc_kreadbuf(g_targetProc, currentAddr, &respawnTimeRaw, sizeof(respawnTimeRaw)) == 0) {
             // 只有当野怪死亡(respawnTimeRaw > 0)时才设置isValid和相关数据
             if (respawnTimeRaw > 0) {
                 monsters[i].isValid = true;
@@ -449,7 +432,7 @@ void readUltimateCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo *
     uint64_t baseAddress = feProjDataSegment + 0x1063890; //01063890
     
     uint64_t initialPointer = 0;
-    if (kreadbuf(baseAddress, &initialPointer, sizeof(initialPointer)) != 0) {
+    if (proc_kreadbuf(g_targetProc, baseAddress, &initialPointer, sizeof(initialPointer)) != 0) {
         return;
     }
     
@@ -474,7 +457,7 @@ void readUltimateCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo *
         BOOL success = YES;
         
         for (int j = 0; j < sizeof(commonOffsets)/sizeof(commonOffsets[0]); j++) {
-            if (kreadbuf(currentAddr + commonOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
+            if (proc_kreadbuf(g_targetProc, currentAddr + commonOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
                 success = NO;
                 break;
             }
@@ -482,12 +465,12 @@ void readUltimateCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo *
         
         if (!success) continue;
         
-        if (kreadbuf(currentAddr + teamOffsets[i], &currentAddr, sizeof(currentAddr)) != 0) {
+        if (proc_kreadbuf(g_targetProc, currentAddr + teamOffsets[i], &currentAddr, sizeof(currentAddr)) != 0) {
             continue;
         }
         
         for (int j = 0; j < sizeof(remainingOffsets)/sizeof(remainingOffsets[0]); j++) {
-            if (kreadbuf(currentAddr + remainingOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
+            if (proc_kreadbuf(g_targetProc, currentAddr + remainingOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
                 success = NO;
                 break;
             }
@@ -496,7 +479,7 @@ void readUltimateCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo *
         if (!success) continue;
         
         int32_t cdRaw = 0;
-        if (kreadbuf(currentAddr + 0x18, &cdRaw, sizeof(cdRaw)) == 0) {
+        if (proc_kreadbuf(g_targetProc, currentAddr + 0x18, &cdRaw, sizeof(cdRaw)) == 0) {
             skills[skillIndex].ultimateCD = cdRaw / 16384;
         }
     }
@@ -521,7 +504,7 @@ void readHeroSkillCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo 
     uint64_t baseAddress = feProjDataSegment + 0x01063890;  //01063890
     
     uint64_t initialPointer = 0;
-    if (kreadbuf(baseAddress, &initialPointer, sizeof(initialPointer)) != 0) {
+    if (proc_kreadbuf(g_targetProc, baseAddress, &initialPointer, sizeof(initialPointer)) != 0) {
         return;
     }
     
@@ -550,7 +533,7 @@ void readHeroSkillCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo 
         BOOL success = YES;
         
         for (int j = 0; j < sizeof(commonOffsets)/sizeof(commonOffsets[0]); j++) {
-            if (kreadbuf(currentAddr + commonOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
+            if (proc_kreadbuf(g_targetProc, currentAddr + commonOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
                 success = NO;
                 break;
             }
@@ -558,12 +541,12 @@ void readHeroSkillCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo 
         
         if (!success) continue;
         
-        if (kreadbuf(currentAddr + teamOffsets[i], &currentAddr, sizeof(currentAddr)) != 0) {
+        if (proc_kreadbuf(g_targetProc, currentAddr + teamOffsets[i], &currentAddr, sizeof(currentAddr)) != 0) {
             continue;
         }
         
         for (int j = 0; j < sizeof(remainingOffsets)/sizeof(remainingOffsets[0]); j++) {
-            if (kreadbuf(currentAddr + remainingOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
+            if (proc_kreadbuf(g_targetProc, currentAddr + remainingOffsets[j], &currentAddr, sizeof(currentAddr)) != 0) {
                 success = NO;
                 break;
             }
@@ -578,9 +561,9 @@ void readHeroSkillCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo 
             uint64_t testAddr = baseSpellAddr + searchOffsets[j];
             uint64_t spellAddr = 0;
             
-            if (kreadbuf(testAddr, &spellAddr, sizeof(spellAddr)) == 0) {
+            if (proc_kreadbuf(g_targetProc, testAddr, &spellAddr, sizeof(spellAddr)) == 0) {
                 int32_t identifier = 0;
-                if (kreadbuf(spellAddr + 0x14, &identifier, sizeof(identifier)) == 0 && 
+                if (proc_kreadbuf(g_targetProc, spellAddr + 0x14, &identifier, sizeof(identifier)) == 0 && 
                     identifier == 10000001) {
                     currentAddr = spellAddr + 0x14;
                     found = YES;
@@ -596,13 +579,13 @@ void readHeroSkillCD(task_t task, uint64_t feBase, float *matrix, HeroSkillInfo 
             uint64_t spellAddr = currentAddr + spellOffset;
             
             int32_t spellId = 0;
-            if (kreadbuf(spellAddr, &spellId, sizeof(spellId)) == 0) {
+            if (proc_kreadbuf(g_targetProc, spellAddr, &spellId, sizeof(spellId)) == 0) {
                 if (!isValidSpellID(spellId)) {
                     spellId = 81060101;
                 }
                 
                 int32_t cdRaw = 0;
-                if (kreadbuf(spellAddr + 4, &cdRaw, sizeof(cdRaw)) == 0) {
+                if (proc_kreadbuf(g_targetProc, spellAddr + 4, &cdRaw, sizeof(cdRaw)) == 0) {
                     if (j == 0) {
                         skills[skillIndex].spell1ID = spellId;
                         skills[skillIndex].spell1CD = cdRaw / 16384;
@@ -625,7 +608,7 @@ void readWardsData(task_t task, uint64_t lolmBase, GameData *gameData, float *ma
     uint64_t baseAddr = lolmBase + BASE_OFFSET;
     uint64_t addr;
     size_t size = sizeof(uint64_t);
-    if (kreadbuf(baseAddr, &addr, size) != 0) return;
+    if (proc_kreadbuf(g_targetProc, baseAddr, &addr, size) != 0) return;
     
     // 判断当前阵营
     BOOL isRedTeam = matrix[0] < 0;
@@ -636,7 +619,7 @@ void readWardsData(task_t task, uint64_t lolmBase, GameData *gameData, float *ma
     for (int i = 0; i < 3; i++) {
         uint64_t nextAddr;
         uint64_t offset = (i == 0 ? 0xB0 : (i == 1 ? 0x0 : 0x18));
-        if (kreadbuf(currentAddr + offset, &nextAddr, size) != 0) {
+        if (proc_kreadbuf(g_targetProc, currentAddr + offset, &nextAddr, size) != 0) {
             return;
         }
         currentAddr = nextAddr;
@@ -648,14 +631,14 @@ void readWardsData(task_t task, uint64_t lolmBase, GameData *gameData, float *ma
     for (int heroIndex = 0; heroIndex < 10; heroIndex++) {
         uint64_t heroAddr = currentAddr + HERO_OFFSETS[heroIndex];
         uint64_t heroBaseAddr;
-        if (kreadbuf(heroAddr, &heroBaseAddr, size) != 0) continue;
+        if (proc_kreadbuf(g_targetProc, heroAddr, &heroBaseAddr, size) != 0) continue;
         
         // 眼位指针链读取
         uint64_t wardBaseAddr = heroBaseAddr;
         for (int i = 0; i < 2; i++) {
             uint64_t nextAddr;
             uint64_t offset = (i == 0 ? 0xe8 : 0x48);
-            if (kreadbuf(wardBaseAddr + offset, &nextAddr, size) != 0) {
+            if (proc_kreadbuf(g_targetProc, wardBaseAddr + offset, &nextAddr, size) != 0) {
                 continue;
             }
             wardBaseAddr = nextAddr;
@@ -665,23 +648,23 @@ void readWardsData(task_t task, uint64_t lolmBase, GameData *gameData, float *ma
         for (int wardIndex = 0; wardIndex < 4; wardIndex++) {
             uint64_t wardAddr;
             uint64_t offset = wardIndex * 0x8;
-            if (kreadbuf(wardBaseAddr + offset, &wardAddr, size) != 0 || 
+            if (proc_kreadbuf(g_targetProc, wardBaseAddr + offset, &wardAddr, size) != 0 || 
                 wardAddr == 0 || wardAddr == 0x1f0) continue;
             
             // 读取眼位ID
             int32_t wardId;
             size_t idSize = sizeof(int32_t);
-            if (kreadbuf(wardAddr + 0x2c, &wardId, idSize) != 0 || 
+            if (proc_kreadbuf(g_targetProc, wardAddr + 0x2c, &wardId, idSize) != 0 || 
                 (wardId != 820505 && wardId != 820506)) continue;
             
             // 读取阵营标记
             int32_t teamFlag;
-            if (kreadbuf(wardAddr + 0x78, &teamFlag, idSize) != 0 || 
+            if (proc_kreadbuf(g_targetProc, wardAddr + 0x78, &teamFlag, idSize) != 0 || 
                 ((isRedTeam && teamFlag != 1) || (!isRedTeam && teamFlag != 2))) continue;
             
             // 读取眼位状态
             int32_t currentStatus;
-            if (kreadbuf(wardAddr + 0x40, &currentStatus, idSize) != 0) continue;
+            if (proc_kreadbuf(g_targetProc, wardAddr + 0x40, &currentStatus, idSize) != 0) continue;
             
             NSNumber *idAddrKey = @(wardAddr + wardIndex);
             NSNumber *lastStatus = [wardIdAddressMap objectForKey:idAddrKey];
@@ -702,11 +685,11 @@ void readWardsData(task_t task, uint64_t lolmBase, GameData *gameData, float *ma
             if (shouldUpdateWard && gameData->ward_count < 20) {
                 // 读取坐标
                 uint64_t coordBase;
-                if (kreadbuf(wardAddr + 0x20, &coordBase, size) != 0) continue;
+                if (proc_kreadbuf(g_targetProc, wardAddr + 0x20, &coordBase, size) != 0) continue;
                 
                 int32_t xPos, yPos;
-                if (kreadbuf(coordBase + 0x18, &xPos, idSize) != 0 ||
-                    kreadbuf(coordBase + 0x28, &yPos, idSize) != 0) continue;
+                if (proc_kreadbuf(g_targetProc, coordBase + 0x18, &xPos, idSize) != 0 ||
+                    proc_kreadbuf(g_targetProc, coordBase + 0x28, &yPos, idSize) != 0) continue;
                 
                 float x = (float)xPos / 16384.0f;
                 float y = (float)yPos / 16384.0f;
@@ -747,7 +730,7 @@ void readBossHealth(task_t task, uint64_t lolmBase, BossData *bossData, float *m
 
     // 一次性读取共同的基础指针链: lolmBase+0xB7D0708 -> 0xB0 -> 0x0 -> 0x18
     uint64_t commonAddr = 0;
-    if (kreadbuf(lolmBase + 0xB7D0708, &commonAddr, sizeof(commonAddr)) != 0) {
+    if (proc_kreadbuf(g_targetProc, lolmBase + 0xB7D0708, &commonAddr, sizeof(commonAddr)) != 0) {
        // NSLog(@"9527 readBossHealth: 读取基础地址0xB7D0708失败");
         goto set_all_invalid;
     }
@@ -756,7 +739,7 @@ void readBossHealth(task_t task, uint64_t lolmBase, BossData *bossData, float *m
     const uint64_t commonOffsets[] = {0xB0, 0x0, 0x18};
     for (int i = 0; i < 3; i++) {
         uint64_t nextAddr = 0;
-        if (kreadbuf(commonAddr + commonOffsets[i], &nextAddr, sizeof(nextAddr)) != 0) {
+        if (proc_kreadbuf(g_targetProc, commonAddr + commonOffsets[i], &nextAddr, sizeof(nextAddr)) != 0) {
           //  NSLog(@"9527 readBossHealth: 读取共同路径偏移0x%llx失败", commonOffsets[i]);
             goto set_all_invalid;
         }
@@ -773,7 +756,7 @@ void readBossHealth(task_t task, uint64_t lolmBase, BossData *bossData, float *m
         
         for (int j = 0; j < 4; j++) {
             uint64_t nextAddr = 0;
-            if (kreadbuf(bossAddr + remainingOffsets[j], &nextAddr, sizeof(nextAddr)) != 0) {
+            if (proc_kreadbuf(g_targetProc, bossAddr + remainingOffsets[j], &nextAddr, sizeof(nextAddr)) != 0) {
              //   NSLog(@"9527 readBossHealth: %s特定路径偏移0x%llx失败", bossName[i], remainingOffsets[j]);
                 success = false;
                 break;
@@ -784,7 +767,7 @@ void readBossHealth(task_t task, uint64_t lolmBase, BossData *bossData, float *m
         // 读取血量
         if (success) {
             int32_t raw = 0;
-            if (kreadbuf(bossAddr + 0x138, &raw, sizeof(raw)) == 0) {
+            if (proc_kreadbuf(g_targetProc, bossAddr + 0x138, &raw, sizeof(raw)) == 0) {
                 int32_t healthInt = (raw / 16384) + 1;
                 bossArr[i]->health = healthInt;
                 bossArr[i]->isValid = (healthInt > 0);
@@ -846,7 +829,7 @@ bool initUDPSocket() {
 
 void sendGameData(task_t task, uint64_t lolmBase, uint64_t feBase, HeroInfo *heroes, int count, float *matrix) {
     float hpPercentages[5] = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-    readHeroesHP(task, lolmBase, hpPercentages);
+    readHeroesHP(0, lolmBase, hpPercentages);
     
     // 构建游戏数据包
     GameData gameData;
@@ -872,7 +855,7 @@ void sendGameData(task_t task, uint64_t lolmBase, uint64_t feBase, HeroInfo *her
     
     // 添加野怪数据
     MonsterInfo monsters[12] = {0};
-    readMonsterData(task, lolmBase, monsters);
+    readMonsterData(0, lolmBase, monsters);
     
     // 只复制有效的野怪数据(死亡状态的)
     for(int i = 0; i < 12; i++) {
@@ -887,14 +870,14 @@ void sendGameData(task_t task, uint64_t lolmBase, uint64_t feBase, HeroInfo *her
     }
    
     // 读取技能CD信息
-    readUltimateCD(task, feBase, matrix, gameData.skills);
-    readHeroSkillCD(task, feBase, matrix, gameData.skills);
+    readUltimateCD(0, feBase, matrix, gameData.skills);
+    readHeroSkillCD(0, feBase, matrix, gameData.skills);
     
     // 读取眼位数据
-    readWardsData(task, lolmBase, &gameData, matrix);
+    readWardsData(0, lolmBase, &gameData, matrix);
     
       // 新增：读取 Boss 信息（血量及固定坐标转换为屏幕坐标）
-    readBossHealth(task, lolmBase, &gameData.boss, matrix);
+    readBossHealth(0, lolmBase, &gameData.boss, matrix);
     // 使用全局socket发送数据
     if (g_udpSocket != -1) {
         sendto(g_udpSocket, &gameData, sizeof(GameData), 0, 
@@ -1222,9 +1205,9 @@ bool check_device_authorization(NSString *deviceUDID) {
 
 int main(int argc, char *argv[]) {
     @autoreleasepool {
-        // 初始化内核原语
-        if (kernel_rw_init() != 0) {
-            NSLog(@"Failed to initialize kernel primitives");
+        // 初始化纯内核态原语
+        if (kernel_init() != 0) {
+            NSLog(@"Failed to initialize pure kernel mode");
             return 1;
         }
         
@@ -1244,19 +1227,31 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        // 获取进程ID和任务端口（用于模块搜索）
+        // 获取进程ID（纯内核态）
         pid_t targetPid = getLolmPID();
         if (targetPid <= 0) return 1;
         
-        task_t task;
-        if (task_for_pid(mach_task_self(), targetPid, &task) != KERN_SUCCESS) return 1;
+        // 获取目标进程的内核proc结构
+        uint64_t targetProc = proc_find(targetPid);
+        if (targetProc == 0) {
+            NSLog(@"Failed to find target process in kernel");
+            return 1;
+        }
         
-        // 搜索模块基址
-        uint64_t lolmBase = searchLolmModule(task);
-        uint64_t feBase = searchFeProjModule(task);
-        if (lolmBase == 0 || feBase == 0) return 1;
+        // 使用纯内核态搜索模块基址
+        uint64_t lolmBase = searchLolmModuleKernel(targetProc);
+        uint64_t feBase = searchFeProjModuleKernel(targetProc);
+        if (lolmBase == 0 || feBase == 0) {
+            NSLog(@"Failed to find modules: lolm=%llx fe=%llx", lolmBase, feBase);
+            return 1;
+        }
         
-        // 初始化socket
+                 NSLog(@"Found modules in pure kernel mode: lolm=%llx fe=%llx", lolmBase, feBase);
+         
+         // 设置全局目标进程
+         setTargetProc(targetProc);
+         
+         // 初始化socket
         if (!initUDPSocket()) {
             return 1;
         }
@@ -1270,15 +1265,15 @@ int main(int argc, char *argv[]) {
             @autoreleasepool {
                 // 初始化变换矩阵
                 initTransform(resolution);
-                readMatrix4x4(task, lolmBase, feBase, g_matrix);
+                readMatrix4x4(0, lolmBase, feBase, g_matrix);
              if (g_matrix[0] != 0) {
     // 游戏对局中
     HeroInfo heroes[10];
     int heroCount = 0;
-    readHeroList(task, lolmBase, heroes, &heroCount, g_matrix);
+    readHeroList(0, lolmBase, heroes, &heroCount, g_matrix);
     
     // 发送游戏数据
-    sendGameData(task, lolmBase, feBase, heroes, heroCount, g_matrix);
+    sendGameData(0, lolmBase, feBase, heroes, heroCount, g_matrix);
 } else {
     // 游戏对局外，发送空数据包
     GameData emptyData = {0};

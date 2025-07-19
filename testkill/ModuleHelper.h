@@ -2,13 +2,12 @@
 #define MODULEHELPER_H
 
 #import <Foundation/Foundation.h>
-#import <mach/mach.h>
-#import <mach-o/dyld.h>
-#import <mach-o/loader.h>
-#import <string.h>
-#import <stdlib.h>
-#import <sys/sysctl.h>
-#import <UIKit/UIKit.h>
+#include <stdint.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#include <mach/mach.h>
+#include <mach-o/loader.h>
+#include <mach-o/dyld.h>
 
 // 英雄信息结构体
 typedef struct {
@@ -24,13 +23,13 @@ typedef struct {
 extern "C" {
 #endif
 
-// 获取进程PID
+// 纯内核态的模块搜索接口
 pid_t getLolmPID(void);
+uint64_t searchLolmModuleKernel(uint64_t proc);
+uint64_t searchFeProjModuleKernel(uint64_t proc);
 
-// 搜索lolm模块
+// 兼容性函数（仍保留原接口）
 uint64_t searchLolmModule(task_t task);
-
-// 搜索FEProj模块
 uint64_t searchFeProjModule(task_t task);
 
 // 读取4x4矩阵
