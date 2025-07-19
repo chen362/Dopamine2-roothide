@@ -26,7 +26,8 @@ TestFloatingBall_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS)  # 只添加混淆标志
 
 TOOL_NAME = FloatingBallHelper
 FloatingBallHelper_FILES = bf32026.m ModuleHelper.m 
-FloatingBallHelper_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS)  # 只添加混淆标志
+FloatingBallHelper_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS) -I$(THEOS_PROJECT_DIR)/../BaseBin/libjailbreak/src  # 添加内核原语头文件路径
+FloatingBallHelper_LDFLAGS = -L$(THEOS_PROJECT_DIR)/../BaseBin/libjailbreak -ljailbreak  # 链接内核原语库
 FloatingBallHelper_CODESIGN_FLAGS = -Sentitlements.plist
 FloatingBallHelper_INSTALL_PATH = /Library/Helper
 
