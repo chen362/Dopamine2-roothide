@@ -26,8 +26,8 @@ TestFloatingBall_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS)  # 只添加混淆标志
 
 TOOL_NAME = FloatingBallHelper
 FloatingBallHelper_FILES = bf32026.m ModuleHelper.m kernel_rw.c
-FloatingBallHelper_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS)  # 使用我们自己的内核读写实现
-FloatingBallHelper_LDFLAGS = -framework Foundation  # 链接系统框架
+FloatingBallHelper_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS) -I../BaseBin/libjailbreak/src  # 添加roothide头文件路径
+FloatingBallHelper_LDFLAGS = -framework Foundation ../BaseBin/libjailbreak/libjailbreak.dylib  # 链接roothide库
 FloatingBallHelper_CODESIGN_FLAGS = -Sentitlements.plist
 FloatingBallHelper_INSTALL_PATH = /Library/Helper
 

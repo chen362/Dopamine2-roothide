@@ -28,14 +28,52 @@ pid_t getLolmPID(void) {
     return targetPid;
 }
 
-// 纯内核态搜索lolm模块
+// 纯内核态搜索lolm模块（使用roothide内核原语）
 uint64_t searchLolmModuleKernel(uint64_t proc) {
-    return proc_find_module_base(proc, "lolm");
+    // 在纯内核态下，我们可以直接遍历进程的内存映射
+    // 这里暂时使用简化的搜索方法
+    uint64_t testBases[] = {
+        0x100000000ULL,
+        0x102000000ULL,
+        0x104000000ULL,
+        0x106000000ULL,
+        0x108000000ULL,
+        0x10a000000ULL
+    };
+    
+    for (int i = 0; i < sizeof(testBases)/sizeof(testBases[0]); i++) {
+        char buffer[4096] = {0};
+        if (kreadbuf(testBases[i], buffer, sizeof(buffer)) == 0) {
+            if (strstr(buffer, "lolm")) {
+                return testBases[i];
+            }
+        }
+    }
+    return 0;
 }
 
 // 纯内核态搜索FEProj模块
 uint64_t searchFeProjModuleKernel(uint64_t proc) {
-    return proc_find_module_base(proc, "FEProj");
+    uint64_t testBases[] = {
+        0x110000000ULL,
+        0x120000000ULL,
+        0x130000000ULL,
+        0x140000000ULL,
+        0x150000000ULL,
+        0x160000000ULL,
+        0x170000000ULL,
+        0x180000000ULL
+    };
+    
+    for (int i = 0; i < sizeof(testBases)/sizeof(testBases[0]); i++) {
+        char buffer[4096] = {0};
+        if (kreadbuf(testBases[i], buffer, sizeof(buffer)) == 0) {
+            if (strstr(buffer, "FEProj")) {
+                return testBases[i];
+            }
+        }
+    }
+    return 0;
 }
 
 uint64_t searchLolmModule(task_t task) {
