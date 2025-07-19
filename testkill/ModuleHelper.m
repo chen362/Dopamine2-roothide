@@ -204,4 +204,33 @@ uint64_t searchFeProjModule(task_t task) {
         address += size;
     }
     return 0;
+}
+
+// 写入调试日志函数
+void writeDebugLog(NSString *message) {
+#ifdef TARGET_OS_IPHONE
+    NSLog(@"[testkill] %@", message);
+    
+    // 可选：写入文件日志
+    NSString *logPath = @"/tmp/testkill.log";
+    NSString *timestamp = [[NSDate date] description];
+    NSString *logEntry = [NSString stringWithFormat:@"[%@] %@\n", timestamp, message];
+    
+    // 追加写入日志文件
+    NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:logPath];
+    if (fileHandle) {
+        [fileHandle seekToEndOfFile];
+        [fileHandle writeData:[logEntry dataUsingEncoding:NSUTF8StringEncoding]];
+        [fileHandle closeFile];
+    } else {
+        // 文件不存在，创建新文件
+        [logEntry writeToFile:logPath 
+                   atomically:YES 
+                     encoding:NSUTF8StringEncoding 
+                        error:nil];
+    }
+#else
+    // 语法检查模式
+    printf("[testkill] %s\n", [message UTF8String]);
+#endif
 } 
