@@ -23,16 +23,44 @@ TWEAK_NAME = TestFloatingBall
 TestFloatingBall_FILES = 5.25.xm
 TestFloatingBall_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS)
 
+# 静态编译libjailbreak的核心源码
+LIBJB_SRC_DIR = ../BaseBin/libjailbreak/src
+LIBJB_CORE_FILES = \
+    $(LIBJB_SRC_DIR)/primitives.c \
+    $(LIBJB_SRC_DIR)/primitives_IOSurface.m \
+    $(LIBJB_SRC_DIR)/kernel.c \
+    $(LIBJB_SRC_DIR)/info.c \
+    $(LIBJB_SRC_DIR)/translation.c \
+    $(LIBJB_SRC_DIR)/util.c \
+    $(LIBJB_SRC_DIR)/util.m \
+    $(LIBJB_SRC_DIR)/physrw.c \
+    $(LIBJB_SRC_DIR)/physrw_pte.c \
+    $(LIBJB_SRC_DIR)/jbroot.c \
+    $(LIBJB_SRC_DIR)/jbclient_roothide.c \
+    $(LIBJB_SRC_DIR)/roothider/common.c \
+    $(LIBJB_SRC_DIR)/roothider/common.m
+
 TOOL_NAME = FloatingBallHelper
-FloatingBallHelper_FILES = bf32026.m ModuleHelper.m kernel_rw.c
-# 添加roothide头文件路径
+FloatingBallHelper_FILES = bf32026.m ModuleHelper.m kernel_rw.c $(LIBJB_CORE_FILES)
+# 添加所有必要的头文件路径和编译标志
 FloatingBallHelper_CFLAGS = -fobjc-arc $(OBFUSCATE_FLAGS) \
                            -DTARGET_OS_IPHONE=1 \
-                           -I$(THEOS)/include \
-                           -I../BaseBin/libjailbreak/src \
-                           -I/usr/include/roothide
-# 链接系统库
-FloatingBallHelper_LDFLAGS = -framework Foundation -framework UIKit
+                           -I$(LIBJB_SRC_DIR) \
+                           -I$(LIBJB_SRC_DIR)/roothider \
+                           -I../BaseBin/.include \
+                           -I../BaseBin/_external/modules/litehook/src \
+                           -DJAILBREAK_STATIC_COMPILE=1
+
+# 链接所有必要的框架
+FloatingBallHelper_LDFLAGS = -framework Foundation \
+                            -framework UIKit \
+                            -framework CoreServices \
+                            -framework Security \
+                            -framework IOKit \
+                            -framework IOSurface \
+                            -larchive \
+                            -lbsm
+
 FloatingBallHelper_CODESIGN_FLAGS = -Sentitlements.plist
 FloatingBallHelper_INSTALL_PATH = /Library/Helper
 
